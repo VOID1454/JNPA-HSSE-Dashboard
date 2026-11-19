@@ -87,7 +87,7 @@ def visual(df,key,val,title,kind="bar"):
  fig=px.pie(df,names=key,values=val,hole=.38,title=title) if kind=="pie" else px.bar(df,x=key,y=val,title=title)
  st.plotly_chart(fig,use_container_width=True)
 def unique(df):
- return df[df.phone.fillna("").astype(str).str.fullmatch(r"\\d{10}")].phone.nunique()
+ return df[df.phone.fillna("").astype(str).str.fullmatch(r"\d{10}")].phone.nunique()
 def clean(v):return '' if pd.isna(v) else str(v).strip()
 def phone(v):
  s=re.sub(r'\D','',clean(v).replace('.0',''))
@@ -126,6 +126,7 @@ def prepare(df,source):
  for col in ['name','designation','organisation_raw','organisation','phone','email','course','batch']:
   df[col]=df[col].map(clean)
  df['phone']=df.phone.map(phone)
+ df['course']=df['course'].replace('', 'Not Specified')
  df['organisation']=[org(a if a else b) for a,b in zip(df.organisation,df.organisation_raw)]
  # Parse dates individually to support mixed timezone-aware and naive Excel values.
  def normalise_training_date(value):
@@ -161,7 +162,7 @@ if page=="Executive dashboard":
  b.metric("Unique valid contacts",f"{unique(f):,}")
  c1.metric("Organisations",f.organisation.nunique())
  e.metric("Courses",f.course.nunique())
- g.metric("Missing / invalid phones",int((~f.phone.astype(str).str.fullmatch(r"\\d{10}")).sum()))
+ g.metric("Missing / invalid phones",int((~f.phone.astype(str).str.fullmatch(r"\d{10}")).sum()))
  st.caption("Attendances are records; unique participants are distinct valid contact numbers.")
  summary=f.groupby("organisation").size().reset_index(name="Attendances").sort_values("Attendances",ascending=False)
  l,r=st.columns(2)
@@ -173,12 +174,12 @@ if page=="Executive dashboard":
  if len(trend):st.plotly_chart(px.line(trend,x="month",y="Attendances",markers=True,title="Monthly training trend"),use_container_width=True)
 elif page=="Organisations":
  a=f.groupby("organisation").agg(attendances=("id","size"),courses=("course","nunique")).reset_index()
- u=f[f.phone.astype(str).str.fullmatch(r"\\d{10}")].groupby("organisation").phone.nunique().rename("unique_participants")
+ u=f[f.phone.astype(str).str.fullmatch(r"\d{10}")].groupby("organisation").phone.nunique().rename("unique_participants")
  a=a.join(u,on="organisation").fillna({"unique_participants":0}).sort_values("attendances",ascending=False)
  st.dataframe(a,use_container_width=True,hide_index=True);csv_button(a,"organisation_summary.csv")
  visual(a.head(20),"organisation","attendances","Organisation attendances")
 elif page=="Participants":
- good=f[f.phone.astype(str).str.fullmatch(r"\\d{10}")]
+ good=f[f.phone.astype(str).str.fullmatch(r"\d{10}")]
  people=good.sort_values("training_date").groupby("phone").agg(name=("name","last"),organisation=("organisation","last"),attendances=("id","size"),courses=("course","nunique"),last_training=("training_date","max")).reset_index()
  st.dataframe(people,use_container_width=True,hide_index=True);csv_button(people,"participant_directory.csv")
  number=st.text_input("Search complete training history by 10-digit contact number")
@@ -195,10 +196,10 @@ elif page=="Training analytics":
  matrix=pd.crosstab(f.organisation,f.course).reset_index()
  st.dataframe(matrix,use_container_width=True);csv_button(matrix,"organisation_course_matrix.csv")
 elif page=="Data quality":
- invalid=f[~f.phone.astype(str).str.fullmatch(r"\\d{10}")]
+ invalid=f[~f.phone.astype(str).str.fullmatch(r"\d{10}")]
  st.metric("Attendance records with missing/invalid contact",len(invalid))
  st.dataframe(invalid,use_container_width=True,hide_index=True)
- names=f[f.phone.astype(str).str.fullmatch(r"\\d{10}")].groupby("phone").name.nunique()
+ names=f[f.phone.astype(str).str.fullmatch(r"\d{10}")].groupby("phone").name.nunique()
  st.subheader("Different names sharing one contact")
  st.dataframe(f[f.phone.isin(names[names>1].index)][["phone","name","organisation"]].drop_duplicates(),use_container_width=True,hide_index=True)
 elif page=="Staff access":
@@ -238,6 +239,7 @@ elif page=="Data management":
      added=0
      for row in incoming.to_dict("records"):
       cleanrow={k:(None if pd.isna(v) or v=="" else str(v)) for k,v in row.items()}
+      cleanrow['course']=cleanrow.get('course') or 'Not Specified'
       fingerprint=sig(cleanrow)
       if fingerprint in existing:continue
       cleanrow["created_by"]=user.id
